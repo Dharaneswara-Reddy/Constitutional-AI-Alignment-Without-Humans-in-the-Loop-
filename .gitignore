@@ -1,0 +1,28 @@
+# Environment secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Outputs (large model files)
+outputs/sft_model*/
+outputs/grpo_model*/
+outputs/checkpoints/
+
+# Downloaded datasets (large)
+datasets/*.jsonl
+datasets/*.parquet
+
+# Logs (regenerated)
+logs/*.jsonl
+logs/tensorboard/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/

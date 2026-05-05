@@ -1,0 +1,55 @@
+# ============================================================
+# Constitutional AI — Google Colab Requirements
+# Conflict-free install order for Colab T4/A100
+# ============================================================
+#
+# ROOT CAUSE of ImportError: cannot import '_unsloth_get_mm_token_id'
+#   Colab pre-installs an old unsloth_zoo that doesn't match the
+#   newer unsloth pulled from git. Fix: force-reinstall both together.
+#
+# INSTALL ORDER (run in a Colab cell):
+#
+#   # Step 1: force-sync unsloth + unsloth_zoo versions
+#   pip install --upgrade --no-deps --force-reinstall unsloth unsloth_zoo
+#
+#   # Step 2: let unsloth's deps resolve the right trl/transformers
+#   pip install trl transformers peft datasets accelerate bitsandbytes
+#
+#   # Step 3: remaining project deps
+#   pip install groq streamlit plotly pyvis networkx
+#   pip install tensorboard pandas pyarrow sentencepiece protobuf pyngrok
+#
+# DO NOT pin trl to a specific version here — unsloth manages compatibility.
+# DO NOT use the git+github unsloth URL — use PyPI unsloth (simpler, works).
+# ============================================================
+
+# Core — unsloth manages compatible trl/transformers/peft versions
+unsloth
+unsloth_zoo
+trl
+transformers>=4.44.0
+peft>=0.12.0
+datasets>=2.20.0
+accelerate>=0.30.0
+bitsandbytes>=0.43.0
+
+# Groq API judge
+groq>=0.9.0
+
+# Dashboard & visualization
+streamlit>=1.35.0
+plotly>=5.22.0
+pyvis>=0.3.2
+networkx>=3.3
+
+# Logging
+tensorboard>=2.17.0
+
+# Data processing
+pandas>=2.0.0
+pyarrow>=16.0.0
+sentencepiece
+protobuf
+
+# Colab tunnel
+pyngrok

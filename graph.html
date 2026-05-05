@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Constitutional AI — Architecture Graph</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0e17;--surface:#111827;--surface2:#1e293b;--border:#1e293b;
+    --text:#e2e8f0;--text2:#94a3b8;
+    --accent:#6366f1;--accent2:#818cf8;
+    --green:#34d399;--amber:#fbbf24;--rose:#fb7185;
+    --cyan:#22d3ee;--purple:#c084fc;--orange:#fb923c;
+  }
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;overflow:hidden}
+  canvas{display:block}
+  #header{
+    position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:16px;
+    padding:12px 24px;background:linear-gradient(180deg,rgba(10,14,23,.98),rgba(10,14,23,.85));
+    backdrop-filter:blur(24px);border-bottom:1px solid rgba(99,102,241,.15);z-index:100;
+  }
+  #header h1{font-size:16px;font-weight:700;letter-spacing:-.3px;background:linear-gradient(135deg,var(--accent2),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  #header .pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:rgba(99,102,241,.15);color:var(--accent2)}
+  #header .spacer{flex:1}
+  .legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+  .legend-dot{width:10px;height:10px;border-radius:50%}
+  #sidebar{
+    position:fixed;top:52px;right:0;bottom:0;width:380px;
+    background:linear-gradient(180deg,var(--surface),rgba(17,24,39,.96));
+    backdrop-filter:blur(20px);border-left:1px solid var(--border);padding:20px;
+    overflow-y:auto;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);z-index:90;
+  }
+  #sidebar.open{transform:translateX(0)}
+  #sidebar h2{font-size:14px;font-weight:700;margin-bottom:6px;color:var(--accent2)}
+  #sidebar .file-path{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);margin-bottom:14px;word-break:break-all}
+  #sidebar .section{margin-bottom:16px}
+  #sidebar .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:6px}
+  #sidebar .badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;margin:2px 4px 2px 0}
+  #sidebar .desc{font-size:12px;line-height:1.6;color:var(--text2)}
+  #sidebar .fn-item{padding:6px 10px;border-radius:6px;margin-bottom:4px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green)}
+  #sidebar .fn-item .fn-desc{font-family:'Inter',sans-serif;font-size:10px;color:var(--text2);margin-top:2px;display:block}
+  #sidebar .close-btn{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .2s}
+  #sidebar .close-btn:hover{background:rgba(251,113,133,.15);color:var(--rose)}
+  #controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:100}
+  #controls button{padding:6px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif}
+  #controls button:hover{background:rgba(99,102,241,.2);border-color:var(--accent)}
+  #controls button.active{background:rgba(99,102,241,.25);border-color:var(--accent2);color:var(--accent2)}
+  ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>🏛️ Constitutional AI — Architecture Graph</h1>
+  <span class="pill">Bai et al. 2022</span>
+  <div class="spacer"></div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Config</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div>Data</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Training</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Evaluation</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>Visualization</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--rose)"></div>Pipeline Flow</div>
+  </div>
+</div>
+<div id="sidebar"><button class="close-btn" onclick="closeSidebar()">✕</button><div id="sidebar-content"></div></div>
+<div id="controls">
+  <button onclick="resetView()">Reset View</button>
+  <button onclick="toggleLabels()" id="btnLabels" class="active">Labels</button>
+  <button onclick="toggleEdges()" id="btnEdges" class="active">Edges</button>
+  <button onclick="filterLayer('all')" class="active" data-layer="all">All</button>
+  <button onclick="filterLayer('data')" data-layer="data">📦 Data</button>
+  <button onclick="filterLayer('training')" data-layer="training">🏋️ Training</button>
+  <button onclick="filterLayer('eval')" data-layer="eval">📋 Eval</button>
+  <button onclick="filterLayer('viz')" data-layer="viz">📊 Viz</button>
+  <button onclick="filterLayer('config')" data-layer="config">⚙️ Config</button>
+</div>
+<canvas id="canvas"></canvas>
+<script>
+const GROUP_COLORS = {
+  config:'#6366f1', data:'#22d3ee', training:'#34d399',
+  eval:'#fbbf24', viz:'#c084fc'
+};
+const EDGE_COLORS = {
+  imports:'rgba(99,102,241,.35)', pipeline:'rgba(251,113,133,.5)',
+  contains:'rgba(99,102,241,.1)'
+};
+
+const NODES = [
+  {id:'config_py', label:'config.py', group:'config', layer:'config', r:30,
+   file:'config.py',
+   desc:'Central hyperparameters — model, LoRA, SFT, GRPO, Groq API, checkpoint, paths. Single source of truth.',
+   fns:[{name:'BASE_MODEL',desc:'unsloth/Qwen2-0.5B-Instruct-bnb-4bit'},{name:'GRPO_KL_COEFF',desc:'β=0.1 — KL penalty coefficient'},{name:'GROQ_MODEL',desc:'llama-3.3-70b-versatile'},{name:'REWARD_CLAMP_LOW/HIGH',desc:'Soft labels [0.4, 0.6]'}]},
+  {id:'constitution', label:'constitution.json', group:'config', layer:'config', r:28,
+   file:'constitution.json',
+   desc:'16 SL critique+revision principles + 16 RL principles from Appendix C of Bai et al. 2022, verbatim.',
+   fns:[{name:'sl_principles[16]',desc:'Critique request + revision request pairs'},{name:'rl_principles[16]',desc:'Preference ranking instructions'}]},
+  {id:'download', label:'download_datasets', group:'data', layer:'data', r:28,
+   file:'src/data/download_datasets.py',
+   desc:'Downloads Anthropic/hh-rlhf via HuggingFace API. Strategy A: parquet bulk (fast). Strategy B: rows API fallback. Curl-based, no HF token needed.',
+   fns:[{name:'download_via_parquet(split)',desc:'Bulk parquet → JSONL merge'},{name:'download_via_rows_api(split, max)',desc:'Batch of 100 rows fallback'},{name:'print_dataset_stats()',desc:'Row counts + sample preview'}]},
+  {id:'prepare', label:'prepare_datasets', group:'data', layer:'data', r:30,
+   file:'src/data/prepare_datasets.py',
+   desc:'Formats HH-RLHF for SFT and GRPO. 3-step critique+revision chain via Groq on REJECTED responses (Sec 3.1). Mixes helpfulness samples (Sec 3.2). GRPO: 40% red-team, 40% ambiguous, 20% normal.',
+   fns:[{name:'parse_hh_conversation(text)',desc:'Split Human:/Assistant: turns'},{name:'apply_critique_revision_chain()',desc:'Groq API → critique → revision'},{name:'prepare_sft_dataset(max)',desc:'Harmless + helpful mix → JSONL'},{name:'prepare_grpo_prompts(max)',desc:'Prompt extraction with category mix'}]},
+  {id:'reward', label:'reward_function', group:'training', layer:'training', r:32,
+   file:'src/training/reward_function.py',
+   desc:'Constitutional reward via Groq API. Ensembles 4 random RL principles (Sec 4.3), soft labels clamped [0.4,0.6], evasiveness penalty (Sec 4.4), engagement bonus for explanatory responses.',
+   fns:[{name:'constitutional_reward_fn(prompts, completions)',desc:'TRL GRPOTrainer reward signature'},{name:'compute_ensembled_reward(prompt, resp, n=4)',desc:'Average over n random principles'},{name:'detect_evasive_response(resp)',desc:'Regex patterns for boilerplate refusals'},{name:'get_groq_constitutional_score()',desc:'Single-principle A/B comparison via Groq'}]},
+  {id:'ckpt', label:'checkpoint_manager', group:'training', layer:'training', r:28,
+   file:'src/training/checkpoint_manager.py',
+   desc:'Saves/resumes training state every N steps + epoch end. Google Drive auto-detection for Colab persistence. Saves LoRA adapter, random states, config snapshot. Prunes to last 3.',
+   fns:[{name:'save_checkpoint(model, tok, state, ...)',desc:'LoRA + state + random seeds → disk + Drive'},{name:'load_latest_checkpoint(phase)',desc:'"Resuming from epoch X, step Y"'},{name:'_detect_google_drive()',desc:'Auto-detect /content/drive/MyDrive'}]},
+  {id:'sft', label:'phase1_sft', group:'training', layer:'training', r:32,
+   file:'src/training/phase1_sft.py',
+   desc:'Phase 1: SFT with Unsloth + TRL SFTTrainer. Produces π_ref. CAISFTCallback for checkpointing + TensorBoard logging. Saves merged 16-bit model for GRPO.',
+   fns:[{name:'run_sft_training(overrides)',desc:'Main entry — supports resume'},{name:'format_sft_sample(ex, tok)',desc:'Qwen2 chat template formatting'},{name:'CAISFTCallback',desc:'Custom callback: ckpt + TB logging'}]},
+  {id:'grpo', label:'phase2_grpo', group:'training', layer:'training', r:34,
+   file:'src/training/phase2_grpo.py',
+   desc:'Phase 2: KL-Regularized GRPO. PatchGRPOTrainer() + GRPOConfig(beta=0.1). Samples G=4 responses per prompt, scores with constitutional reward, group-normalizes advantages. Exports GGUF.',
+   fns:[{name:'run_grpo_training(overrides)',desc:'Main entry — auto-resume from checkpoint'},{name:'GRPOCheckpointCallback',desc:'Saves every N steps + TB logging'},{name:'PatchGRPOTrainer()',desc:'Unsloth memory optimizations (called before init)'}]},
+  {id:'evaluator', label:'evaluator', group:'eval', layer:'eval', r:30,
+   file:'src/evaluation/evaluator.py',
+   desc:'Evaluates Base→SFT→GRPO on 50 held-out red-team prompts. Harmfulness (0-4 severity), helpfulness, evasiveness. Pairwise Elo via Groq judge (paper Sec 3.3).',
+   fns:[{name:'evaluate_model_stage(model, tok, prompts)',desc:'Per-stage metrics dict'},{name:'compute_pairwise_elo(a, b, prompts)',desc:'Groq A/B judge → win rate + Elo Δ'},{name:'run_full_evaluation()',desc:'3-way eval with formatted table'}]},
+  {id:'tblog', label:'tensorboard_logger', group:'viz', layer:'viz', r:26,
+   file:'src/visualization/tensorboard_logger.py',
+   desc:'TensorBoard SummaryWriter wrapper. Logs SFT loss/LR, GRPO reward/KL/evasion metrics, alignment eval results, reward distributions, hyperparams.',
+   fns:[{name:'log_sft_step(step, metrics)',desc:'Loss, LR, grad_norm'},{name:'log_grpo_step(step, rewards, kl, ...)',desc:'Reward stats + evasion/engagement rates'},{name:'log_alignment_eval(step, results)',desc:'Per-stage harmful/helpful/evasive rates'}]},
+  {id:'graphgen', label:'graph_generator', group:'viz', layer:'viz', r:24,
+   file:'src/visualization/graph_generator.py',
+   desc:'Generates graph.html (this file). Uses pyvis + networkx. Color-coded nodes by module type, pipeline flow arrows, clickable tooltips.',
+   fns:[{name:'generate_graph_html(path)',desc:'AST parse → pyvis Network → HTML'},{name:'extract_file_info(path)',desc:'Docstring + function names'}]},
+  {id:'dashboard', label:'streamlit_dashboard', group:'config', layer:'config', r:32,
+   file:'streamlit_dashboard.py',
+   desc:'9-page Streamlit dashboard: Overview, Config, Data, SFT Training, GRPO Training, Metrics (Plotly + radar), Inference (chat), Evaluation, Codebase graph.',
+   fns:[{name:'9 pages',desc:'Full training control center'},{name:'Plotly charts',desc:'Reward curves, loss, radar alignment triangle'},{name:'@st.cache_resource',desc:'Model caching for inference'}]},
+  {id:'notebook', label:'colab_notebook', group:'config', layer:'config', r:28,
+   file:'colab_notebook.ipynb',
+   desc:'15-cell Google Colab notebook. GPU check, Drive mount, install deps, download data, TensorBoard, SFT, GRPO, evaluation, model download, ngrok dashboard.',
+   fns:[{name:'15 cells',desc:'End-to-end training workflow'},{name:'Auto-resume',desc:'Checkpoint detection on reconnect'},{name:'ngrok tunnel',desc:'Streamlit dashboard from Colab'}]},
+];
+
+const EDGES = [
+  // Pipeline flow (thick, colored)
+  {from:'download',to:'prepare',type:'pipeline',label:'raw HH-RLHF'},
+  {from:'prepare',to:'sft',type:'pipeline',label:'SFT dataset'},
+  {from:'prepare',to:'grpo',type:'pipeline',label:'GRPO prompts'},
+  {from:'sft',to:'grpo',type:'pipeline',label:'π_ref → π_θ'},
+  {from:'reward',to:'grpo',type:'pipeline',label:'R(s,a)'},
+  {from:'grpo',to:'evaluator',type:'pipeline',label:'aligned model'},
+  {from:'sft',to:'evaluator',type:'pipeline',label:'SFT model'},
+  // Import edges
+  {from:'download',to:'config_py',type:'imports'},
+  {from:'prepare',to:'config_py',type:'imports'},
+  {from:'prepare',to:'constitution',type:'imports'},
+  {from:'reward',to:'config_py',type:'imports'},
+  {from:'reward',to:'constitution',type:'imports'},
+  {from:'ckpt',to:'config_py',type:'imports'},
+  {from:'sft',to:'config_py',type:'imports'},
+  {from:'sft',to:'ckpt',type:'imports'},
+  {from:'sft',to:'tblog',type:'imports'},
+  {from:'grpo',to:'config_py',type:'imports'},
+  {from:'grpo',to:'ckpt',type:'imports'},
+  {from:'grpo',to:'tblog',type:'imports'},
+  {from:'grpo',to:'reward',type:'imports'},
+  {from:'evaluator',to:'config_py',type:'imports'},
+  {from:'evaluator',to:'reward',type:'imports'},
+  {from:'tblog',to:'config_py',type:'imports'},
+  {from:'dashboard',to:'config_py',type:'imports'},
+  {from:'dashboard',to:'ckpt',type:'imports'},
+  {from:'dashboard',to:'evaluator',type:'imports'},
+];
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W,H,dpr;
+function resize(){
+  dpr=window.devicePixelRatio||1;W=window.innerWidth;H=window.innerHeight;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resize(); window.addEventListener('resize',resize);
+
+let showLabels=true,showEdges=true,activeLayer='all';
+let camera={x:0,y:0,zoom:1},drag=null,hover=null,selected=null,simRunning=true;
+
+NODES.forEach((n,i)=>{
+  const a=(i/NODES.length)*Math.PI*2, s=220+Math.random()*80;
+  n.x=Math.cos(a)*s; n.y=Math.sin(a)*s; n.vx=0; n.vy=0; n.visible=true; n.alpha=1;
+});
+
+function isVisible(n){
+  if(activeLayer==='all') return true;
+  return n.layer===activeLayer || n.group==='config';
+}
+
+function simulate(){
+  const vis=NODES.filter(n=>n.visible);
+  for(let i=0;i<vis.length;i++){
+    for(let j=i+1;j<vis.length;j++){
+      let dx=vis[j].x-vis[i].x, dy=vis[j].y-vis[i].y;
+      let d=Math.sqrt(dx*dx+dy*dy)||1, f=3000/(d*d);
+      let fx=(dx/d)*f, fy=(dy/d)*f;
+      vis[i].vx-=fx; vis[i].vy-=fy; vis[j].vx+=fx; vis[j].vy+=fy;
+    }
+  }
+  EDGES.forEach(e=>{
+    const a=NODES.find(n=>n.id===e.from), b=NODES.find(n=>n.id===e.to);
+    if(!a||!b||!a.visible||!b.visible) return;
+    let dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)||1;
+    let f=.005*(d-140), fx=(dx/d)*f, fy=(dy/d)*f;
+    a.vx+=fx; a.vy+=fy; b.vx-=fx; b.vy-=fy;
+  });
+  vis.forEach(n=>{
+    n.vx-=n.x*.001; n.vy-=n.y*.001;
+    if(drag&&drag.node===n) return;
+    n.vx*=.82; n.vy*=.82; n.x+=n.vx*.35; n.y+=n.vy*.35;
+  });
+}
+
+function toScreen(x,y){return{x:(x-camera.x)*camera.zoom+W/2,y:(y-camera.y)*camera.zoom+H/2}}
+function toWorld(sx,sy){return{x:(sx-W/2)/camera.zoom+camera.x,y:(sy-H/2)/camera.zoom+camera.y}}
+
+function drawEdge(a,b,edge){
+  const p1=toScreen(a.x,a.y), p2=toScreen(b.x,b.y);
+  const isPipe=edge.type==='pipeline';
+  ctx.strokeStyle=isPipe?'rgba(251,113,133,.45)':EDGE_COLORS[edge.type]||'rgba(255,255,255,.1)';
+  ctx.lineWidth=isPipe?2.5:1;
+  if(isPipe){ctx.setLineDash([6,4])}else{ctx.setLineDash([])}
+  const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2;
+  const dx=p2.x-p1.x,dy=p2.y-p1.y,dist=Math.sqrt(dx*dx+dy*dy);
+  const off=dist*.1, cx=mx-dy/dist*off, cy=my+dx/dist*off;
+  ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.quadraticCurveTo(cx,cy,p2.x,p2.y);ctx.stroke();
+  ctx.setLineDash([]);
+  // Arrow
+  if(isPipe){
+    const t=.7,ax=(1-t)*(1-t)*p1.x+2*(1-t)*t*cx+t*t*p2.x;
+    const ay=(1-t)*(1-t)*p1.y+2*(1-t)*t*cy+t*t*p2.y;
+    const tx2=t+.01,bx=(1-tx2)*(1-tx2)*p1.x+2*(1-tx2)*tx2*cx+tx2*tx2*p2.x;
+    const by=(1-tx2)*(1-tx2)*p1.y+2*(1-tx2)*tx2*cy+tx2*tx2*p2.y;
+    const ang=Math.atan2(by-ay,bx-ax);
+    ctx.fillStyle='rgba(251,113,133,.7)';ctx.beginPath();
+    ctx.moveTo(ax+Math.cos(ang)*8,ay+Math.sin(ang)*8);
+    ctx.lineTo(ax+Math.cos(ang+2.5)*8,ay+Math.sin(ang+2.5)*8);
+    ctx.lineTo(ax+Math.cos(ang-2.5)*8,ay+Math.sin(ang-2.5)*8);
+    ctx.fill();
+  }
+  // Label
+  if(isPipe&&edge.label&&camera.zoom>.5){
+    const lx=(p1.x+2*cx+p2.x)/4, ly=(p1.y+2*cy+p2.y)/4;
+    ctx.font='500 10px Inter';ctx.fillStyle='rgba(251,113,133,.8)';ctx.textAlign='center';
+    ctx.fillText(edge.label,lx,ly-6);
+  }
+}
+
+function drawNode(n){
+  const p=toScreen(n.x,n.y), r=n.r*camera.zoom;
+  const col=GROUP_COLORS[n.group]||'#6366f1';
+  const isH=hover===n, isS=selected===n;
+  ctx.globalAlpha=n.alpha;
+  if(isH||isS){ctx.shadowBlur=18;ctx.shadowColor=col}
+  ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+  ctx.fillStyle=col+'20';ctx.fill();
+  ctx.strokeStyle=isH||isS?col:col+'80';ctx.lineWidth=isH||isS?3:1.5;ctx.stroke();
+  ctx.beginPath();ctx.arc(p.x,p.y,r*.3,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+  ctx.shadowBlur=0;
+  if(showLabels&&camera.zoom>.4){
+    ctx.font=`600 ${Math.max(10,12*camera.zoom)}px Inter`;
+    ctx.fillStyle='#f8fafc';ctx.textAlign='center';
+    ctx.fillText(n.label,p.x,p.y+r+16);
+  }
+  ctx.globalAlpha=1;
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  if(showEdges){EDGES.forEach(e=>{
+    const a=NODES.find(n=>n.id===e.from),b=NODES.find(n=>n.id===e.to);
+    if(a&&b&&a.visible&&b.visible) drawEdge(a,b,e);
+  })}
+  NODES.filter(n=>n.visible).forEach(drawNode);
+}
+
+function loop(){
+  NODES.forEach(n=>{const v=isVisible(n);n.visible=v||n.alpha>.01;n.alpha+=(v?1:0-n.alpha)*.08});
+  if(simRunning) simulate();
+  render();
+  requestAnimationFrame(loop);
+}
+loop();
+
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');selected=null}
+function resetView(){camera={x:0,y:0,zoom:1}}
+function toggleLabels(){showLabels=!showLabels;document.getElementById('btnLabels').classList.toggle('active')}
+function toggleEdges(){showEdges=!showEdges;document.getElementById('btnEdges').classList.toggle('active')}
+function filterLayer(l){activeLayer=l;document.querySelectorAll('#controls button[data-layer]').forEach(b=>b.classList.toggle('active',b.dataset.layer===l))}
+
+function openSidebar(node){
+  const sb=document.getElementById('sidebar'),cont=document.getElementById('sidebar-content');
+  const col=GROUP_COLORS[node.group]||'#6366f1';
+  let html=`<h2>${node.label}</h2><div class="file-path">${node.file||''}</div>`;
+  html+=`<div class="section"><span class="badge" style="background:${col}40;color:${col}">${node.group.toUpperCase()}</span></div>`;
+  html+=`<div class="section"><div class="desc">${node.desc||''}</div></div>`;
+  if(node.fns){
+    html+=`<div class="section"><div class="section-title">Key Exports</div>`;
+    node.fns.forEach(f=>html+=`<div class="fn-item">${f.name}<span class="fn-desc">${f.desc}</span></div>`);
+    html+=`</div>`;
+  }
+  cont.innerHTML=html;sb.classList.add('open');
+}
+
+canvas.addEventListener('mousedown',e=>{
+  const w=toWorld(e.clientX,e.clientY);
+  const h=NODES.find(n=>n.visible&&Math.sqrt((n.x-w.x)**2+(n.y-w.y)**2)<n.r);
+  if(h){drag={node:h};openSidebar(h);selected=h}else{drag={pan:true,lastX:e.clientX,lastY:e.clientY}}
+});
+canvas.addEventListener('mousemove',e=>{
+  if(!drag){const w=toWorld(e.clientX,e.clientY);hover=NODES.find(n=>n.visible&&Math.sqrt((n.x-w.x)**2+(n.y-w.y)**2)<n.r);canvas.style.cursor=hover?'pointer':'default';return}
+  if(drag.node){const w=toWorld(e.clientX,e.clientY);drag.node.x=w.x;drag.node.y=w.y}
+  else if(drag.pan){camera.x-=(e.clientX-drag.lastX)/camera.zoom;camera.y-=(e.clientY-drag.lastY)/camera.zoom;drag.lastX=e.clientX;drag.lastY=e.clientY}
+});
+canvas.addEventListener('mouseup',()=>drag=null);
+canvas.addEventListener('wheel',e=>{e.preventDefault();camera.zoom*=e.deltaY<0?1.1:.9},{passive:false});
+</script>
+</body>
+</html>

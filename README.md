@@ -138,7 +138,7 @@ constitutional-ai/
 
 This pipeline is designed for accessibility:
 
-- **GPU Requirement:** Minimum 8GB VRAM (e.g., NVIDIA RTX 4060, Intel Arc Xe, Google Colab T4).
+- **GPU Requirement:** Minimum 8GB VRAM (e.g., NVIDIA RTX 4060, Google Colab T4).
 - **RAM Requirement:** 16GB System RAM.
 - **Storage:** ~20GB for base model weights and datasets.
 
@@ -154,3 +154,4 @@ This pipeline is designed for accessibility:
 ## 📝 License
 
 Distributed under the MIT License. See `LICENSE` for more information. Model weights are subject to the original Qwen and Llama licenses.
+

@@ -1,0 +1,29 @@
+digraph DNN {
+    rankdir=TB;
+    node [shape=box, style=filled, fontname="Arial", fontsize=10];
+    
+    // Input
+    Input [label="Input Tokens\n(max 512)", fillcolor="#E3F2FD"];
+    
+    // Embedding
+    Embed [label="Embedding Layer\n151,936 vocab", fillcolor="#FFF9C4"];
+    
+    // Transformer Layers
+    Trans [label="28 Transformer Layers\n• Grouped-Query Attention\n• 12 attention heads\n• 1536 hidden dim", fillcolor="#F0F4C3", shape=box];
+    
+    // LoRA
+    LoRA [label="LoRA Adapters\n• Rank r=16, α=16\n• Targets: Q,K,V,O,Gate,Up,Down\n• 9.4M params (0.6%)", fillcolor="#FFE0B2"];
+    
+    // Output
+    Output [label="Output Logits\n(next token)", fillcolor="#FFCCBC"];
+    
+    // Quantization
+    Quant [label="4-bit NF4\nQuantization", fillcolor="#D1C4E9", shape=ellipse];
+    
+    // Connections
+    Input -> Embed;
+    Embed -> Trans;
+    Trans -> LoRA [style=dashed, color=blue, label="low-rank\nadaptation", fontsize=9];
+    Trans -> Output;
+    Quant -> Trans [style=dotted, label="base model\nweights", fontsize=9];
+}

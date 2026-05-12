@@ -1,50 +1,104 @@
 # ============================================================
-# Constitutional AI — Requirements
+# Constitutional AI — Requirements (FIXED)
 # Implementing Bai et al. 2022 with GRPO-KL on Qwen2-0.5B
+#
+# IMPORTANT — read before pip-installing:
+#
+#   This file pins ALL versions to match what uv.lock resolved.
+#   Mixing versions (e.g., using the old transformers==4.46.3 that
+#   Cell 1 used to install) will break import-time compatibility.
+#
+#   The two most common mistakes people hit:
+#     1. transformers 4.x installed → conflicts with trl 0.24.0 API
+#     2. torch 2.5.x or 2.6.x on Windows → no torchao wheel exists yet
+#     3. pip not installed in venv → all installs fail
+#
+#   Safe install command (run once, then restart your kernel/runtime):
+#
+#   Windows (cmd):
+#     python -m ensurepip --upgrade
+#     python -m pip install --upgrade pip setuptools wheel
+#     python -m pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu124 --extra-index-url https://pypi.org/simple
+#
+#   Linux/Mac (bash):
+#     python -m ensurepip --upgrade
+#     python -m pip install --upgrade pip setuptools wheel
+#     pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cu124 --extra-index-url https://pypi.org/simple
+#
 # ============================================================
 
-# Core training stack
-unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
-trl>=0.9.0              # GRPOTrainer requires 0.9+. Tested with TRL 0.24.0.
-transformers>=4.44.0
-peft>=0.12.0
-datasets>=2.20.0
-accelerate>=0.30.0
-bitsandbytes>=0.43.0
+# ── Essential build tools (install FIRST) ────────────────────────────────
+# These must be present before installing anything else
+pip>=24.0
+setuptools>=70.0.0
+wheel>=0.43.0
 
-# API clients
+# ── PyTorch stack — CUDA 12.4 ────────────────────────────────────────────
+# Must be installed from the PyTorch CUDA 12.4 index, NOT from PyPI.
+# Use --index-url https://download.pytorch.org/whl/cu124
+# Note: The +cu124 suffix is automatically added when using the PyTorch index
+torch==2.4.1
+torchvision==0.19.1
+torchaudio==2.4.1
+
+# ── Core training stack ──────────────────────────────────────────────────
+# transformers MUST be 5.5.0 — the lockfile resolves this version.
+# DO NOT install transformers==4.46.3 (what the old Cell 1 did). That
+# version is incompatible with trl 0.24.0's renamed parameters.
+transformers==5.5.0
+trl==0.24.0
+peft==0.19.1
+datasets==4.3.0
+accelerate==1.13.0
+bitsandbytes==0.49.2
+
+# ── torchao (CRITICAL: must be compatible with torch 2.4.1) ──────────────
+# torchao 0.17.0+ requires torch.int1 which doesn't exist in torch 2.4.1
+# torch.int1 was added in torch 2.5+, but we need torch 2.4.1 for Windows
+torchao==0.13.0
+
+# ── Unsloth (git HEAD, colab-new extra) ─────────────────────────────────
+# The [colab-new] extra installs triton + xformers on Linux.
+# On Windows, those are silently skipped (expected behaviour).
+unsloth[colab-new] @ https://github.com/unslothai/unsloth/archive/refs/heads/main.zip
+
+# ── API client ───────────────────────────────────────────────────────────
 groq>=0.9.0             # Groq Python SDK for llama-3.3-70b judge/critic
 
-# Dashboard and visualization
+# ── Dashboard and visualization ──────────────────────────────────────────
 streamlit>=1.35.0
 plotly>=5.22.0
 pyvis>=0.3.2
 networkx>=3.3
 
-# Logging and monitoring
+# ── Logging and monitoring ───────────────────────────────────────────────
 tensorboard>=2.17.0
-torch>=2.3.0
 
-# Data processing
+# ── Data processing ──────────────────────────────────────────────────────
 pandas>=2.0.0
 pyarrow>=16.0.0         # For parquet file reading
 
-# Utilities
-sentencepiece
+# ── Utilities ────────────────────────────────────────────────────────────
+sentencepiece>=0.2.1
 protobuf
-pyngrok                  # For Colab dashboard tunneling via ngrok
-requests
+python-dotenv            # For loading .env files locally
+pyngrok>=8.1.2           # For Colab dashboard tunneling via ngrok
+requests>=2.33.1
 
 # =============================================================
-# IMPORTANT — TRL 0.24.0 API renames (silent breaking changes):
+# TRL 0.24.0 API renames (silent breaking changes — these are
+# the CORRECT names; the old names are silently IGNORED):
 #
 #   GRPOConfig:
-#     kl_coeff=       → beta=               (KL penalty coefficient)
-#     max_new_tokens= → max_completion_length=
+#     kl_coeff=               → beta=
+#     max_new_tokens=         → max_completion_length=
 #
 #   GRPOTrainer / SFTTrainer:
-#     tokenizer=      → processing_class=
+#     tokenizer=              → processing_class=
 #
-# Using old names is SILENTLY IGNORED — e.g., KL disabled with no error.
-# This codebase uses the correct TRL 0.24.0 parameter names.
+# transformers 5.x changes:
+#   AutoTokenizer.from_pretrained still works but now returns a
+#   PreTrainedTokenizerFast by default on all models.
+#   If you use tokenizer.pad_token = tokenizer.eos_token, set
+#   model.config.pad_token_id as well.
 # =============================================================

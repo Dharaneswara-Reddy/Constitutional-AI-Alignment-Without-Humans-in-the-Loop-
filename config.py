@@ -11,12 +11,25 @@ Paper: Bai et al. 2022 — Constitutional AI: Harmlessness from AI Feedback
 """
 
 import os
+from pathlib import Path
+
+# Load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path)
+except ImportError:
+    pass  # python-dotenv not installed — rely on shell env vars
 
 # =============================================================================
 # Model
 # =============================================================================
-BASE_MODEL = "unsloth/Qwen2-0.5B-Instruct-bnb-4bit"
-MAX_SEQ_LENGTH = 2048
+# Options:
+# - "Qwen/Qwen2-0.5B-Instruct"  # Fast, ~2-3GB VRAM, good for testing
+# - "Qwen/Qwen2-1.5B-Instruct"  # Better quality, ~4-5GB VRAM, recommended
+BASE_MODEL = "Qwen/Qwen2-1.5B-Instruct"  # Using 1.5B for better quality
+MAX_SEQ_LENGTH = 512
 LOAD_IN_4BIT = True              # QLoRA — 4-bit quantized base, FP16 adapters
 
 # =============================================================================
@@ -58,10 +71,38 @@ GRPO_MAX_PROMPTS = 500           # Prompts in GRPO training loop
 # Groq API — Judge + Critic (replaces paper's pre-trained LM feedback model)
 # Paper Section 4.1: "present response pair to feedback model with a principle"
 # =============================================================================
-GROQ_MODEL = "llama-3.3-70b-versatile"   # Fast, free-tier: 14400 req/day
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+                                  # Default: 8B model — higher free-tier token limits
+                                  # Override in .env: GROQ_MODEL=llama-3.3-70b-versatile
+
+# Support multiple keys for rotation to avoid rate limits
+GROQ_API_KEYS = []
+for i in range(1, 6):
+    _key = os.environ.get(f"GROQ_API_KEY_{i}")
+    if _key:
+        GROQ_API_KEYS.append(_key)
+
+# Fallback to GROQ_API_KEY if none of the above are set
+_single_key = os.environ.get("GROQ_API_KEY", "")
+if _single_key and _single_key not in GROQ_API_KEYS:
+    GROQ_API_KEYS.append(_single_key)
+
+_key_index = 0
+
+def get_next_groq_api_key():
+    """Returns the next Groq API key in the rotation."""
+    global _key_index
+    if not GROQ_API_KEYS:
+        return ""
+    key = GROQ_API_KEYS[_key_index % len(GROQ_API_KEYS)]
+    _key_index += 1
+    return key
+
+GROQ_API_KEY = get_next_groq_api_key()
 GROQ_TEMPERATURE = 0.0           # Deterministic judging for reproducibility
 API_DELAY_SECONDS = 0.5          # Groq is fast (~300 tok/s), short delay OK
+API_MAX_RETRIES = 10             # Max retries on 429/5xx before giving up
+API_RETRY_BASE_DELAY = 5         # Base delay (seconds) for exponential backoff
 
 # =============================================================================
 # Reward Scoring — Paper Section 4.3

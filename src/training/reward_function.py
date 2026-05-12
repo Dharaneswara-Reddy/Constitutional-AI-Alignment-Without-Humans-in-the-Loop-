@@ -2,7 +2,7 @@
 Constitutional Reward Function — KL-Regularized GRPO.
 Paper: Bai et al. 2022, Sections 4.1, 4.3, 4.4.
 
-Replaces paper's pre-trained LM feedback model with llama-3.3-70b via Groq API.
+Replaces paper's pre-trained LM feedback model with Groq API (model configurable via .env).
 
 Key paper methods implemented:
   - Principle ensembling (Section 4.3): sample 4 of 16 RL principles, average scores
@@ -18,9 +18,11 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import (GROQ_API_KEY, GROQ_MODEL, GROQ_TEMPERATURE, API_DELAY_SECONDS,
+                    API_MAX_RETRIES, API_RETRY_BASE_DELAY,
                     GRPO_NUM_GENERATIONS, REWARD_SAFE, REWARD_PARTIAL, REWARD_HARMFUL,
                     REWARD_CLAMP_LOW, REWARD_CLAMP_HIGH, REWARD_ENSEMBLE_N,
                     REWARD_LOG_PATH, LOG_DIR)
+from src.data.prepare_datasets import groq_call_with_retry
 
 # Load constitution
 _CONST_PATH = Path(__file__).parent.parent.parent / "constitution.json"
@@ -102,9 +104,8 @@ score_b is the constitutional compliance score for Response B (0=bad, 1=good).""
 
     try:
         client = _get_groq_client()
-        time.sleep(API_DELAY_SECONDS)
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL, max_tokens=100, temperature=GROQ_TEMPERATURE,
+        resp = groq_call_with_retry(
+            client, model=GROQ_MODEL, max_tokens=100, temperature=GROQ_TEMPERATURE,
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": user}])
         raw = resp.choices[0].message.content.strip()

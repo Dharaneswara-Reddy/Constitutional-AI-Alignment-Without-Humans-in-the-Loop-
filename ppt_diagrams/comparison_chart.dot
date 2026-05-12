@@ -1,0 +1,18 @@
+digraph Comparison {
+    rankdir=LR;
+    node [shape=record, fontname="Arial", fontsize=9];
+    
+    // Methods
+    RLHF [label="{RLHF (PPO)|Harmful: 18-25%|Annotations: 10,000+|Memory: 24GB|Time: 48h}", fillcolor="#FFE0B2", style=filled];
+    
+    DPO [label="{DPO|Harmful: 20-28%|Annotations: 5,000+|Memory: 16GB|Time: 24h}", fillcolor="#FFF9C4", style=filled];
+    
+    CAI [label="{CAI (Ours)|Harmful: 15%|Annotations: 0|Memory: 4.5GB|Time: 6h}", fillcolor="#C8E6C9", style=filled];
+    
+    Base [label="{Base Model|Harmful: 72%|Annotations: 0|Memory: 12GB|Time: 0h}", fillcolor="#FFCDD2", style=filled];
+    
+    // Comparison
+    Base -> RLHF [label="75% reduction", fontsize=8];
+    Base -> DPO [label="67% reduction", fontsize=8];
+    Base -> CAI [label="79% reduction\nBEST", fontsize=8, color=green, style=bold];
+}

@@ -1,31 +1,63 @@
 [project]
 name = "constitutional-ai"
 version = "0.1.0"
-description = "Add your description here"
+description = "Constitutional AI implementation with GRPO-KL"
 readme = "README.md"
-requires-python = ">=3.13"
+# uv.lock was resolved against Python 3.12.x — do NOT use 3.11 or 3.13.
+requires-python = "==3.12.*"
 dependencies = [
-    "accelerate>=0.30.0",
-    "bitsandbytes>=0.43.0",
-    "datasets>=2.20.0",
-    "groq>=0.9.0",
-    "networkx>=3.3",
-    "pandas>=2.0.0",
-    "peft>=0.12.0",
-    "plotly>=5.22.0",
-    "protobuf>=7.34.1",
-    "pyarrow>=16.0.0",
-    "pyngrok>=8.1.2",
-    "pyvis>=0.3.2",
-    "requests>=2.33.1",
-    "sentencepiece>=0.2.1",
-    "streamlit>=1.35.0",
-    "tensorboard>=2.17.0",
-    "torch>=2.3.0",
-    "transformers>=4.44.0",
-    "trl>=0.9.0",
+    # ── Essential build tools ───────────────────────────────────────────────
+    "pip>=24.0",
+    "setuptools>=70.0.0",
+    "wheel>=0.43.0",
+    # ── PyTorch stack (CUDA 12.4) ───────────────────────────────────────────
+    # Pinned to 2.4.1 — the uv.lock resolves torch 2.4.1+cu124 on Windows/Linux x86.
+    # Do NOT upgrade to 2.5.x or 2.6.x without regenerating the lockfile;
+    # unsloth's torchao dependency does not yet have Windows wheels for torch 2.5+.
+    "torch==2.4.1",
+    "torchvision==0.19.1",
+    "torchaudio==2.4.1",
+    # ── Training stack ──────────────────────────────────────────────────────
+    # transformers 5.5.0 is what the lockfile resolves to. The old pyproject.toml
+    # said >=4.44.0, which let pip install 4.46.3 — that conflicts with trl 0.24.0.
+    "transformers==5.5.0",
+    "trl==0.24.0",
+    "accelerate==1.13.0",
+    "bitsandbytes==0.49.2",
+    "datasets==4.3.0",
+    "peft==0.19.1",
+    # ── Unsloth (from git) ──────────────────────────────────────────────────
+    # The [colab-new] extra pulls in triton + xformers on Linux.
+    # On Windows you get the base unsloth without those Linux-only deps.
     "unsloth[colab-new]",
+    # ── API / utilities ─────────────────────────────────────────────────────
+    "groq>=0.9.0",
+    "python-dotenv",
+    "pandas>=2.0.0",
+    "pyarrow>=16.0.0",
+    "requests>=2.33.1",
+    # ── Dashboard ───────────────────────────────────────────────────────────
+    "streamlit>=1.35.0",
+    "plotly>=5.22.0",
+    "pyvis>=0.3.2",
+    "networkx>=3.3",
+    # ── Logging ─────────────────────────────────────────────────────────────
+    "tensorboard>=2.17.0",
+    # ── Tokenisers / serialisation ──────────────────────────────────────────
+    "sentencepiece>=0.2.1",
+    "protobuf",
+    # ── Colab tunnelling ────────────────────────────────────────────────────
+    "pyngrok>=8.1.2",
+    "torchao==0.13.0",
 ]
 
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
 [tool.uv.sources]
-unsloth = { git = "https://github.com/unslothai/unsloth.git" }
+torch      = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }
+torchaudio  = { index = "pytorch-cu124" }
+unsloth = { url = "https://github.com/unslothai/unsloth/archive/refs/heads/main.zip" }

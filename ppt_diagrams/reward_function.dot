@@ -1,0 +1,56 @@
+digraph RewardFunction {
+    rankdir=LR;
+    node [shape=box, style="filled,rounded", fontname="Arial", fontsize=9];
+    edge [fontsize=8];
+    splines=ortho;
+    
+    // Input
+    Input [label="Prompt +\nResponse", fillcolor="#E6F3FF", shape=ellipse, width=1.2];
+    
+    // Principle Sampling
+    Principles [label="Sample N=4\nPrinciples", fillcolor="#FFFACD", width=1.2];
+    
+    // Parallel Evaluation - 2x2 grid
+    subgraph cluster_0 {
+        label="Constitutional Judges";
+        style=filled;
+        fillcolor="#F0FFF0";
+        color=lightgray;
+        fontsize=10;
+        
+        J1 [label="Harmless", fillcolor="#E6FFE6", width=1];
+        J2 [label="Helpful", fillcolor="#E6FFE6", width=1];
+        J3 [label="Honest", fillcolor="#E6FFE6", width=1];
+        J4 [label="Direct", fillcolor="#E6FFE6", width=1];
+        
+        {rank=same; J1; J2;}
+        {rank=same; J3; J4;}
+    }
+    
+    // Scoring
+    Score [label="Score:\nSAFE=1.0\nPARTIAL=0.5\nHARM=0.0", fillcolor="#FFE6CC", width=1.2];
+    
+    // Ensemble & Clamp
+    Final [label="Mean Score\n↓\nClamp [0.4,0.6]\n↓\nFinal Reward", fillcolor="#E6D5FF", width=1.2];
+    
+    // Output
+    Output [label="Reward\nScore", fillcolor="#D5E6FF", shape=ellipse, width=1.2];
+    
+    // Connections - horizontal flow with bends
+    Input -> Principles [color="#4A90E2"];
+    Principles -> J1 [color="#50C878"];
+    Principles -> J2 [color="#50C878"];
+    Principles -> J3 [color="#50C878"];
+    Principles -> J4 [color="#50C878"];
+    J1 -> Score [color="#E74C3C"];
+    J2 -> Score [color="#E74C3C"];
+    J3 -> Score [color="#E74C3C"];
+    J4 -> Score [color="#E74C3C"];
+    Score -> Final [color="#9B59B6"];
+    Final -> Output [color="#3498DB"];
+    
+    // Layout hints
+    {rank=same; Input; Principles;}
+    {rank=min; Input;}
+    {rank=max; Output;}
+}

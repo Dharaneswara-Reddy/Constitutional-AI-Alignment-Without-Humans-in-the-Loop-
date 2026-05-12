@@ -1,0 +1,60 @@
+digraph SystemArch {
+    rankdir=TB;
+    node [shape=box, style="filled,rounded", fontname="Arial", fontsize=10];
+    edge [fontsize=9];
+    splines=ortho;
+    
+    // Top Row - Left Block
+    subgraph cluster_0 {
+        label="Data Preparation";
+        style=filled;
+        color=lightgray;
+        fillcolor="#F0F8FF";
+        fontsize=11;
+        
+        Data [label="HH-RLHF Dataset\n(160K samples)\n↓\nSample 2K for SFT\n500 for GRPO\n↓\nGroq API:\nCritique + Revision", fillcolor="#E6F3FF"];
+    }
+    
+    // Top Row - Right Block
+    subgraph cluster_1 {
+        label="Phase 1: SFT";
+        style=filled;
+        color=lightgray;
+        fillcolor="#F0FFF0";
+        fontsize=11;
+        
+        SFT [label="Qwen2-1.5B + LoRA\n↓\nTrain 3 epochs\nLR = 2×10⁻⁴\n↓\nOutput: π_ref\n(Reference Policy)", fillcolor="#E6FFE6"];
+    }
+    
+    // Bottom Row - Left Block
+    subgraph cluster_2 {
+        label="Phase 2: GRPO";
+        style=filled;
+        color=lightgray;
+        fillcolor="#FFF5F5";
+        fontsize=11;
+        
+        GRPO [label="Init π_θ from π_ref\n↓\nGenerate G=4 responses\n↓\nConstitutional Judge\n↓\nPolicy Update (250 steps)\nβ·KL penalty = 0.1", fillcolor="#FFE6E6"];
+    }
+    
+    // Bottom Row - Right Block
+    subgraph cluster_3 {
+        label="Evaluation";
+        style=filled;
+        color=lightgray;
+        fillcolor="#FFF9F0";
+        fontsize=11;
+        
+        Eval [label="Final Model: π_θ\n━━━━━━━━━━━\nHarmful: 72% → 15%\nHelpfulness: 0.78\nRefusal: 68%", fillcolor="#FFEEDD"];
+    }
+    
+    // Invisible nodes for layout
+    {rank=same; Data; SFT;}
+    {rank=same; GRPO; Eval;}
+    
+    // Connections
+    Data -> SFT [label="critique-revision\npairs", color="#4A90E2"];
+    SFT -> GRPO [label="reference\npolicy", color="#50C878"];
+    GRPO -> Eval [label="trained\nmodel", color="#E74C3C"];
+    SFT -> GRPO [label="KL penalty\nβ=0.1", style=dashed, color=red, constraint=false];
+}

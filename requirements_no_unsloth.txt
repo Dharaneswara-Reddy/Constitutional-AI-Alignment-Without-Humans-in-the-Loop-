@@ -1,0 +1,66 @@
+# ============================================================
+# Constitutional AI — Requirements WITHOUT Unsloth (Windows Compatible)
+# Implementing Bai et al. 2022 with GRPO-KL on Qwen2-0.5B
+#
+# This version SKIPS unsloth to avoid torchao/torch.int1 compatibility issues.
+# All functionality is preserved - training will just be slower (1x vs 2-5x).
+#
+# Installation:
+#   python -m pip install -r requirements_no_unsloth.txt \
+#       --index-url https://download.pytorch.org/whl/cu124 \
+#       --extra-index-url https://pypi.org/simple
+# ============================================================
+
+# ── Essential build tools ────────────────────────────────────────────────
+pip>=24.0
+setuptools>=70.0.0
+wheel>=0.43.0
+packaging>=24.0  # Required by various packages
+
+# ── PyTorch stack — CUDA 12.4 ────────────────────────────────────────────
+torch==2.4.1
+torchvision==0.19.1
+torchaudio==2.4.1
+
+# ── Core training stack ──────────────────────────────────────────────────
+transformers==5.5.0
+trl==0.24.0
+peft==0.19.1
+datasets==4.3.0
+accelerate==1.13.0
+bitsandbytes==0.49.2
+mergekit  # Required by TRL for model merging
+setuptools>=70.0.0  # Required by TensorBoard and other tools
+
+# ── API client ───────────────────────────────────────────────────────────
+groq>=0.9.0
+
+# ── Dashboard and visualization ──────────────────────────────────────────
+streamlit>=1.35.0
+plotly>=5.22.0
+pyvis>=0.3.2
+networkx>=3.3
+
+# ── Logging and monitoring ───────────────────────────────────────────────
+tensorboard>=2.17.0
+
+# ── Data processing ──────────────────────────────────────────────────────
+pandas>=2.0.0
+pyarrow>=16.0.0
+
+# ── Utilities ────────────────────────────────────────────────────────────
+sentencepiece>=0.2.1
+protobuf
+python-dotenv
+pyngrok>=8.1.2
+requests>=2.33.1
+
+# =============================================================
+# NOTE: unsloth, unsloth_zoo, and torchao are EXCLUDED
+# 
+# Why? torchao requires torch.int1 (added in torch 2.5+)
+# but we need torch 2.4.1 for Windows CUDA 12.4 support.
+#
+# Impact: Training will be slower but fully functional.
+# All GRPO-KL, LoRA, 4-bit quantization features work.
+# =============================================================

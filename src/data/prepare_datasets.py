@@ -5,20 +5,72 @@ Paper: Bai et al. 2022, Sections 3.1 (critique+revision) and 3.2 (helpfulness).
 For SFT: apply critique+revision on REJECTED responses (harmful ones).
          Mix in CHOSEN responses as helpfulness samples (Section 3.2).
 For GRPO: extract prompts only — mix 40% red-team, 40% ambiguous, 20% normal.
+
+Rate-limit resilience:
+  - Exponential backoff on 429/5xx errors (auto-waits and retries)
+  - Incremental checkpointing every 10 samples (resume from crash)
+  - Progress saved to sft_dataset.jsonl after each batch of 10
 """
 
-import json, os, random, time
+import json, os, random, time, re
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import (DATASET_DIR, SFT_DATA_PATH, GRPO_PROMPT_PATH,
-                    SFT_MAX_SAMPLES, GRPO_MAX_PROMPTS, GROQ_API_KEY,
-                    GROQ_MODEL, GROQ_TEMPERATURE, API_DELAY_SECONDS)
+                    SFT_MAX_SAMPLES, GRPO_MAX_PROMPTS, get_next_groq_api_key,
+                    GROQ_MODEL, GROQ_TEMPERATURE, API_DELAY_SECONDS,
+                    API_MAX_RETRIES, API_RETRY_BASE_DELAY)
 
 _CONST_PATH = Path(__file__).parent.parent.parent / "constitution.json"
 with open(_CONST_PATH) as f:
     _CONST = json.load(f)
 SL_PRINCIPLES = _CONST["sl_principles"]
+
+
+# =========================================================================
+# Robust Groq API caller with exponential backoff + retry
+# =========================================================================
+def groq_call_with_retry(client, **kwargs):
+    """
+    Wraps client.chat.completions.create() with exponential backoff.
+    On 429 (rate limit): parses retry-after header and waits.
+    On 5xx (server error): retries with exponential delay.
+    Returns the API response or raises after max retries exhausted.
+    """
+    for attempt in range(1, API_MAX_RETRIES + 1):
+        try:
+            time.sleep(API_DELAY_SECONDS)
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            error_str = str(e)
+            is_rate_limit = "429" in error_str or "rate_limit" in error_str.lower()
+            is_server_error = any(code in error_str for code in ["500", "502", "503", "504"])
+
+            if not (is_rate_limit or is_server_error):
+                raise  # Non-retryable error — propagate immediately
+
+            # Parse wait time from Groq error message (e.g., "Please try again in 2m38.112s")
+            wait_seconds = API_RETRY_BASE_DELAY * (2 ** (attempt - 1))  # Exponential backoff default
+            wait_match = re.search(r'try again in (\d+)m([\d.]+)s', error_str)
+            if wait_match:
+                wait_seconds = int(wait_match.group(1)) * 60 + float(wait_match.group(2))
+                wait_seconds += 5  # Add 5s buffer
+            else:
+                # Try seconds-only format
+                wait_match = re.search(r'try again in ([\d.]+)s', error_str)
+                if wait_match:
+                    wait_seconds = float(wait_match.group(1)) + 5
+
+            if attempt == API_MAX_RETRIES:
+                print(f"\n  [api] FAILED after {API_MAX_RETRIES} retries: {e}")
+                raise
+
+            error_type = "RATE_LIMIT" if is_rate_limit else "SERVER_ERROR"
+            print(f"\n  [api] {error_type} (attempt {attempt}/{API_MAX_RETRIES}). "
+                  f"Waiting {wait_seconds:.0f}s before retry...")
+            time.sleep(wait_seconds)
+
+    raise RuntimeError("Exhausted all retries")
 
 
 def parse_hh_conversation(text: str) -> dict:
@@ -39,41 +91,159 @@ def apply_critique_revision_chain(prompt: str, bad_response: str, principle: dic
     Step A: the bad_response is already provided (from rejected HH-RLHF entry).
     Step B: critique it using principle's critique_request.
     Step C: revise using principle's revision_request.
-    Uses Groq API as critic/reviser.
+    Uses Groq API as critic/reviser with automatic retry on rate limits.
     """
     from groq import Groq
-    if not GROQ_API_KEY:
+    key = get_next_groq_api_key()
+    if not key:
         raise ValueError("GROQ_API_KEY not set. Export it first.")
-    client = Groq(api_key=GROQ_API_KEY)
+    client = Groq(api_key=key)
 
-    # Step B — Critique
+    # Step B — Critique (with retry)
     critique_msgs = [
         {"role": "system", "content": "You are a critical AI safety evaluator. Be concise."},
         {"role": "user", "content":
             f"Human request: {prompt}\n\nAI response: {bad_response}\n\n"
             f"{principle['critique_request']}"}
     ]
-    time.sleep(API_DELAY_SECONDS)
-    c_resp = client.chat.completions.create(
-        model=GROQ_MODEL, messages=critique_msgs, max_tokens=300,
+    c_resp = groq_call_with_retry(
+        client, model=GROQ_MODEL, messages=critique_msgs, max_tokens=300,
         temperature=GROQ_TEMPERATURE)
     critique = c_resp.choices[0].message.content.strip()
 
-    # Step C — Revision
+    # Step C — Revision (with retry)
     revision_msgs = [
         {"role": "system", "content": "You are a helpful, harmless AI assistant."},
         {"role": "user", "content":
             f"Human request: {prompt}\n\nOriginal AI response: {bad_response}\n\n"
             f"Critique: {critique}\n\n{principle['revision_request']}"}
     ]
-    time.sleep(API_DELAY_SECONDS)
-    r_resp = client.chat.completions.create(
-        model=GROQ_MODEL, messages=revision_msgs, max_tokens=400,
+    r_resp = groq_call_with_retry(
+        client, model=GROQ_MODEL, messages=revision_msgs, max_tokens=400,
         temperature=GROQ_TEMPERATURE)
     revision = r_resp.choices[0].message.content.strip()
 
     return {"prompt": prompt, "revision": revision, "critique": critique,
             "principle_id": principle["id"]}
+
+
+def _load_existing_progress(path: str) -> list:
+    """Load already-processed samples from an existing JSONL file for resume."""
+    if not os.path.exists(path):
+        return []
+    results = []
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.strip():
+                    results.append(json.loads(line))
+    except Exception:
+        return []
+    return results
+
+
+def prepare_sft_dataset(max_samples: int = SFT_MAX_SAMPLES):
+    """
+    Creates SFT dataset from HH-RLHF using critique+revision chain.
+    Uses REJECTED responses as starting point (paper Section 3.1).
+    Mixes in CHOSEN responses as helpfulness samples (paper Section 3.2).
+    Saves to datasets/sft_dataset.jsonl.
+
+    Resume-safe: loads existing progress and skips already-processed samples.
+    Saves incrementally every 10 samples.
+    """
+    print("=" * 60)
+    print("Preparing SFT Dataset")
+    print(f"  Max samples: {max_samples}")
+    print(f"  Model: {GROQ_MODEL}")
+    print(f"  Retry: up to {API_MAX_RETRIES} attempts with backoff")
+    print("=" * 60)
+    os.makedirs(os.path.dirname(SFT_DATA_PATH), exist_ok=True)
+    rows = load_hh_rlhf("train")
+    random.shuffle(rows)
+
+    # Split budget: 60% harmlessness (critique+revision), 40% helpfulness (direct)
+    n_harmless = int(max_samples * 0.6)
+    n_helpful = max_samples - n_harmless
+
+    # --- Resume support: load existing progress ---
+    existing = _load_existing_progress(SFT_DATA_PATH)
+    existing_harmless = [r for r in existing if r.get("type") == "harmless"]
+    existing_helpful = [r for r in existing if r.get("type") == "helpful"]
+    start_idx = len(existing_harmless)
+    results = list(existing)  # Start with what we already have
+
+    if start_idx > 0:
+        print(f"\n[sft] RESUMING from sample {start_idx} "
+              f"({len(existing_harmless)} harmless + {len(existing_helpful)} helpful already done)")
+
+    # --- Harmlessness samples: critique+revision on REJECTED responses ---
+    remaining_harmless = n_harmless - start_idx
+    if remaining_harmless > 0:
+        print(f"\n[sft] Processing {remaining_harmless} harmlessness samples "
+              f"(critique+revision, starting at {start_idx})...")
+        for i, row in enumerate(rows[start_idx:n_harmless]):
+            actual_idx = start_idx + i
+            try:
+                rejected = parse_hh_conversation(row.get("rejected", ""))
+                if not rejected["prompt"] or not rejected["response"]:
+                    continue
+                principle = random.choice(SL_PRINCIPLES)
+                result = apply_critique_revision_chain(
+                    rejected["prompt"], rejected["response"], principle)
+                result["type"] = "harmless"
+                results.append(result)
+                if (actual_idx + 1) % 10 == 0 or actual_idx == n_harmless - 1:
+                    print(f"  [{actual_idx+1}/{n_harmless}] critique+revision done — saving checkpoint...")
+                    # Save incrementally every 10 samples
+                    with open(SFT_DATA_PATH, "w") as f:
+                        for r in results:
+                            f.write(json.dumps(r) + "\n")
+            except Exception as e:
+                print(f"  [sft] Error at sample {actual_idx}: {e}")
+                # Save what we have before continuing
+                with open(SFT_DATA_PATH, "w") as f:
+                    for r in results:
+                        f.write(json.dumps(r) + "\n")
+                continue
+    else:
+        print(f"\n[sft] Harmlessness samples already complete ({start_idx}/{n_harmless})")
+
+    # --- Helpfulness samples: use CHOSEN responses directly (Section 3.2) ---
+    if len(existing_helpful) < n_helpful:
+        remaining_helpful = n_helpful - len(existing_helpful)
+        print(f"\n[sft] Adding {remaining_helpful} helpfulness samples (chosen responses)...")
+        helpful_rows = rows[n_harmless:n_harmless + remaining_helpful * 2]
+        added = 0
+        for row in helpful_rows:
+            if added >= remaining_helpful:
+                break
+            try:
+                chosen = parse_hh_conversation(row.get("chosen", ""))
+                if not chosen["prompt"] or not chosen["response"]:
+                    continue
+                results.append({
+                    "prompt": chosen["prompt"],
+                    "revision": chosen["response"],
+                    "critique": "",
+                    "principle_id": 0,
+                    "type": "helpful"
+                })
+                added += 1
+            except Exception:
+                continue
+    else:
+        print(f"\n[sft] Helpfulness samples already complete ({len(existing_helpful)}/{n_helpful})")
+
+    with open(SFT_DATA_PATH, "w") as f:
+        for r in results:
+            f.write(json.dumps(r) + "\n")
+
+    print(f"\n[sft] Dataset saved: {len(results)} samples → {SFT_DATA_PATH}")
+    harmless_n = sum(1 for r in results if r["type"] == "harmless")
+    helpful_n = sum(1 for r in results if r["type"] == "helpful")
+    print(f"  Harmlessness: {harmless_n} | Helpfulness: {helpful_n}")
+    return results
 
 
 def load_hh_rlhf(split: str) -> list:
@@ -86,81 +256,6 @@ def load_hh_rlhf(split: str) -> list:
             if line.strip():
                 rows.append(json.loads(line))
     return rows
-
-
-def prepare_sft_dataset(max_samples: int = SFT_MAX_SAMPLES):
-    """
-    Creates SFT dataset from HH-RLHF using critique+revision chain.
-    Uses REJECTED responses as starting point (paper Section 3.1).
-    Mixes in CHOSEN responses as helpfulness samples (paper Section 3.2).
-    Saves to datasets/sft_dataset.jsonl.
-    """
-    print("=" * 60)
-    print("Preparing SFT Dataset")
-    print(f"  Max samples: {max_samples}")
-    print("=" * 60)
-    os.makedirs(os.path.dirname(SFT_DATA_PATH), exist_ok=True)
-    rows = load_hh_rlhf("train")
-    random.shuffle(rows)
-
-    # Split budget: 60% harmlessness (critique+revision), 40% helpfulness (direct)
-    n_harmless = int(max_samples * 0.6)
-    n_helpful = max_samples - n_harmless
-    results = []
-
-    # --- Harmlessness samples: critique+revision on REJECTED responses ---
-    print(f"\n[sft] Processing {n_harmless} harmlessness samples (critique+revision)...")
-    for i, row in enumerate(rows[:n_harmless]):
-        try:
-            rejected = parse_hh_conversation(row.get("rejected", ""))
-            if not rejected["prompt"] or not rejected["response"]:
-                continue
-            principle = random.choice(SL_PRINCIPLES)
-            result = apply_critique_revision_chain(
-                rejected["prompt"], rejected["response"], principle)
-            result["type"] = "harmless"
-            results.append(result)
-            if (i + 1) % 10 == 0:
-                print(f"  [{i+1}/{n_harmless}] critique+revision done")
-                # Save incrementally
-                with open(SFT_DATA_PATH, "w") as f:
-                    for r in results:
-                        f.write(json.dumps(r) + "\n")
-        except Exception as e:
-            print(f"  [sft] Error at sample {i}: {e}")
-            continue
-
-    # --- Helpfulness samples: use CHOSEN responses directly (Section 3.2) ---
-    print(f"\n[sft] Adding {n_helpful} helpfulness samples (chosen responses)...")
-    helpful_rows = rows[n_harmless:n_harmless + n_helpful * 2]
-    added = 0
-    for row in helpful_rows:
-        if added >= n_helpful:
-            break
-        try:
-            chosen = parse_hh_conversation(row.get("chosen", ""))
-            if not chosen["prompt"] or not chosen["response"]:
-                continue
-            results.append({
-                "prompt": chosen["prompt"],
-                "revision": chosen["response"],
-                "critique": "",
-                "principle_id": 0,
-                "type": "helpful"
-            })
-            added += 1
-        except Exception:
-            continue
-
-    with open(SFT_DATA_PATH, "w") as f:
-        for r in results:
-            f.write(json.dumps(r) + "\n")
-
-    print(f"\n[sft] Dataset saved: {len(results)} samples → {SFT_DATA_PATH}")
-    harmless_n = sum(1 for r in results if r["type"] == "harmless")
-    helpful_n = sum(1 for r in results if r["type"] == "helpful")
-    print(f"  Harmlessness: {harmless_n} | Helpfulness: {helpful_n}")
-    return results
 
 
 def prepare_grpo_prompts(max_prompts: int = GRPO_MAX_PROMPTS):

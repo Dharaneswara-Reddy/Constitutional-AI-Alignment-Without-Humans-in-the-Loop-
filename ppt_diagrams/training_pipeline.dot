@@ -1,0 +1,59 @@
+digraph TrainingPipeline {
+    rankdir=TB;
+    node [shape=box, style="filled,rounded", fontname="Arial", fontsize=10];
+    edge [fontsize=9];
+    splines=ortho;
+    
+    // Top Row - Left Block
+    subgraph cluster_0 {
+        label="Data Preparation";
+        style=filled;
+        color=lightgray;
+        fillcolor="#F0F8FF";
+        fontsize=11;
+        
+        Data [label="Download HH-RLHF\n↓\nSample:\n• 2K for SFT\n• 500 for GRPO\n↓\nGroq API:\n• Generate Critiques\n• Generate Revisions", fillcolor="#E6F3FF"];
+    }
+    
+    // Top Row - Right Block
+    subgraph cluster_1 {
+        label="Phase 1: SFT";
+        style=filled;
+        color=lightgray;
+        fillcolor="#F0FFF0";
+        fontsize=11;
+        
+        SFT [label="Load Qwen2-1.5B\n(4-bit quantized)\n↓\nAdd LoRA Adapters\n(r=16, α=16)\n↓\nTrain 3 Epochs\nLR = 2×10⁻⁴\n↓\nSave π_ref", fillcolor="#E6FFE6"];
+    }
+    
+    // Bottom Row - Left Block
+    subgraph cluster_2 {
+        label="Phase 2: GRPO";
+        style=filled;
+        color=lightgray;
+        fillcolor="#FFF5F5";
+        fontsize=11;
+        
+        GRPO [label="Init π_θ from π_ref\n↓\nLoop 250 steps:\n• Generate G=4 responses\n• Score with Judge\n• Compute Advantages\n• Policy Update\n• Apply KL Penalty (β=0.1)\n↓\nSave π_θ", fillcolor="#FFE6E6"];
+    }
+    
+    // Bottom Row - Right Block
+    subgraph cluster_3 {
+        label="Evaluation";
+        style=filled;
+        color=lightgray;
+        fillcolor="#FFF9F0";
+        fontsize=11;
+        
+        Eval [label="Test on 100 prompts\n━━━━━━━━━━━\nMetrics:\n• Harmful Rate\n• Helpfulness\n• Refusal Rate\n━━━━━━━━━━━\nResults:\n72% → 15% harmful\n0.78 helpfulness", fillcolor="#FFEEDD"];
+    }
+    
+    // Invisible nodes for layout
+    {rank=same; Data; SFT;}
+    {rank=same; GRPO; Eval;}
+    
+    // Connections
+    Data -> SFT [label="critique-revision\npairs", color="#4A90E2"];
+    SFT -> GRPO [label="reference\npolicy π_ref", color="#50C878"];
+    GRPO -> Eval [label="trained\nmodel π_θ", color="#E74C3C"];
+}

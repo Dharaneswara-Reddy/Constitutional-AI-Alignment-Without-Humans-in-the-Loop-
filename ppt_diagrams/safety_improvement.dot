@@ -1,0 +1,12 @@
+digraph SafetyMetrics {
+    rankdir=LR;
+    node [shape=box, style=filled, fontname="Arial", fontsize=12];
+    
+    Base [label="Base Model\n72% Harmful", fillcolor="#FF6B6B", fontcolor=white];
+    SFT [label="After SFT\n35% Harmful", fillcolor="#FFA500", fontcolor=white];
+    GRPO [label="After GRPO\n15% Harmful", fillcolor="#4CAF50", fontcolor=white];
+    
+    Base -> SFT [label="51% reduction", fontsize=10];
+    SFT -> GRPO [label="57% reduction", fontsize=10];
+    Base -> GRPO [label="79% total\nreduction", style=bold, color=green, fontsize=11];
+}

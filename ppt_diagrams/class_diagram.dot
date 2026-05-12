@@ -1,0 +1,29 @@
+digraph ClassDiagram {
+    rankdir=TB;
+    node [shape=record, fontname="Arial", fontsize=9];
+    
+    // Classes
+    Config [label="{Config|+ BASE_MODEL\n+ LORA_RANK\n+ SFT_LR\n+ GRPO_KL_COEFF|+ get_next_api_key()}"];
+    
+    DataPrep [label="{DataPreparation|+ hh_rlhf_data\n+ groq_client|+ prepare_sft_dataset()\n+ prepare_grpo_prompts()\n+ generate_critique()\n+ generate_revision()}"];
+    
+    SFTTrainer [label="{SFTTrainer|+ model\n+ tokenizer\n+ lora_config|+ run_sft_training()\n+ save_checkpoint()\n+ load_checkpoint()}"];
+    
+    GRPOTrainer [label="{GRPOTrainer|+ policy_model\n+ ref_model\n+ reward_fn|+ run_grpo_training()\n+ generate_responses()\n+ compute_advantages()\n+ compute_kl_penalty()}"];
+    
+    RewardFn [label="{ConstitutionalReward|+ principles\n+ judge_model\n+ ensemble_n|+ score_response()\n+ sample_principles()\n+ clamp_reward()}"];
+    
+    Evaluator [label="{Evaluator|+ test_prompts\n+ judge_model|+ evaluate_model()\n+ compute_metrics()\n+ generate_report()}"];
+    
+    CheckpointMgr [label="{CheckpointManager|+ checkpoint_dir|+ save_checkpoint()\n+ load_latest()\n+ get_summary()}"];
+    
+    // Relationships
+    SFTTrainer -> Config [label="uses", fontsize=8];
+    GRPOTrainer -> Config [label="uses", fontsize=8];
+    DataPrep -> Config [label="uses", fontsize=8];
+    GRPOTrainer -> RewardFn [label="uses", fontsize=8];
+    GRPOTrainer -> SFTTrainer [label="loads π_ref from", fontsize=8];
+    Evaluator -> GRPOTrainer [label="evaluates", fontsize=8];
+    SFTTrainer -> CheckpointMgr [label="uses", fontsize=8];
+    GRPOTrainer -> CheckpointMgr [label="uses", fontsize=8];
+}

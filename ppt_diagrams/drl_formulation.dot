@@ -1,0 +1,60 @@
+digraph DRLFormulation {
+    rankdir=TB;
+    node [shape=box, style="filled,rounded", fontname="Arial", fontsize=10];
+    edge [fontsize=9];
+    splines=ortho;
+    
+    // Top Row - Left Block: MDP Components
+    subgraph cluster_0 {
+        label="MDP Framework";
+        style=filled;
+        color=lightgray;
+        fillcolor="#F0F8FF";
+        fontsize=11;
+        
+        MDP [label="State (S):\nPrompt + Context\n━━━━━━━━━━━\nAction (A):\nModel Response\n━━━━━━━━━━━\nReward (R):\nConstitutional Score\n━━━━━━━━━━━\nTransition (P):\nDeterministic", fillcolor="#E6F3FF"];
+    }
+    
+    // Top Row - Right Block: Policy Optimization
+    subgraph cluster_1 {
+        label="Policy Optimization";
+        style=filled;
+        color=lightgray;
+        fillcolor="#F0FFF0";
+        fontsize=11;
+        
+        Policy [label="Objective:\nmax E[R(s,a) - β·KL]\n━━━━━━━━━━━\nPolicy: π_θ\nReference: π_ref\n━━━━━━━━━━━\nKL Penalty: β=0.1\n━━━━━━━━━━━\nOptimizer: GRPO\n(Group Relative)", fillcolor="#E6FFE6"];
+    }
+    
+    // Bottom Row - Left Block: Reward Function
+    subgraph cluster_2 {
+        label="Constitutional Reward";
+        style=filled;
+        color=lightgray;
+        fillcolor="#FFF5F5";
+        fontsize=11;
+        
+        Reward [label="Sample N=4 Principles\n↓\nJudge Each Response:\n• SAFE = 1.0\n• PARTIAL = 0.5\n• HARMFUL = 0.0\n↓\nMean Score\n↓\nClamp [0.4, 0.6]", fillcolor="#FFE6E6"];
+    }
+    
+    // Bottom Row - Right Block: Training Loop
+    subgraph cluster_3 {
+        label="RL Training Loop";
+        style=filled;
+        color=lightgray;
+        fillcolor="#FFF9F0";
+        fontsize=11;
+        
+        Loop [label="For each prompt:\n━━━━━━━━━━━\n1. Generate G=4\n   responses\n━━━━━━━━━━━\n2. Score with R(s,a)\n━━━━━━━━━━━\n3. Compute advantages\n   (group-relative)\n━━━━━━━━━━━\n4. Update π_θ with\n   KL regularization", fillcolor="#FFEEDD"];
+    }
+    
+    // Invisible nodes for layout
+    {rank=same; MDP; Policy;}
+    {rank=same; Reward; Loop;}
+    
+    // Connections
+    MDP -> Policy [label="formulation", color="#4A90E2"];
+    Policy -> Loop [label="optimize", color="#50C878"];
+    Reward -> Loop [label="score", color="#E74C3C"];
+    MDP -> Reward [label="evaluate", color="#9B59B6", style=dashed];
+}

@@ -1,0 +1,58 @@
+digraph CAI {
+    rankdir=TB;
+    node [shape=box, style=filled, fontname="Arial"];
+    edge [fontname="Arial"];
+    
+    // Data Layer
+    HH [label="HH-RLHF\nDataset", fillcolor="#E8F4F8", fontsize=10];
+    
+    // Phase 1: SFT
+    subgraph cluster_phase1 {
+        label="Phase 1: Supervised Fine-Tuning";
+        style=dashed;
+        color=blue;
+        
+        Critique [label="AI Critique\n(Groq API)", fillcolor="#FFF4E6", fontsize=10];
+        Revision [label="AI Revision\n(Groq API)", fillcolor="#FFF4E6", fontsize=10];
+        SFT_Data [label="SFT Dataset\n(2000 samples)", fillcolor="#E8F4F8", fontsize=10];
+        SFT [label="Supervised\nFine-Tuning", fillcolor="#E6F3FF", fontsize=10];
+        Pi_ref [label="π_ref\n(Reference)", fillcolor="#E6FFE6", fontsize=10];
+    }
+    
+    // Phase 2: GRPO
+    subgraph cluster_phase2 {
+        label="Phase 2: GRPO Reinforcement Learning";
+        style=dashed;
+        color=red;
+        
+        GRPO_Prompts [label="GRPO Prompts\n(500 samples)", fillcolor="#E8F4F8", fontsize=10];
+        Pi_theta [label="π_θ\n(Trainable)", fillcolor="#FFE6E6", fontsize=10];
+        Generate [label="Generate\nG=4 responses", fillcolor="#FFF4E6", fontsize=10];
+        Judge [label="Constitutional\nJudge", fillcolor="#FFF4E6", fontsize=10];
+        GRPO [label="GRPO\nOptimization", fillcolor="#E6F3FF", fontsize=10];
+        KL [label="KL Penalty\nβ=0.1", fillcolor="#FFE6F0", fontsize=10];
+    }
+    
+    // Output
+    Aligned [label="Aligned Model\nπ_θ*", fillcolor="#E6FFE6", fontsize=11, penwidth=2];
+    
+    // Phase 1 Connections
+    HH -> Critique [label="harmful\nexamples"];
+    Critique -> Revision [label="critiques"];
+    Revision -> SFT_Data [label="revisions"];
+    SFT_Data -> SFT;
+    SFT -> Pi_ref [label="frozen"];
+    
+    // Phase 2 Connections
+    HH -> GRPO_Prompts [label="prompts"];
+    Pi_ref -> Pi_theta [label="initialize"];
+    GRPO_Prompts -> Generate;
+    Pi_theta -> Generate;
+    Generate -> Judge [label="responses"];
+    Judge -> GRPO [label="rewards"];
+    Pi_ref -> KL [label="reference"];
+    Pi_theta -> KL [label="current"];
+    KL -> GRPO [label="penalty"];
+    GRPO -> Pi_theta [style=dashed, label="update", color=red];
+    GRPO -> Aligned [penwidth=2];
+}

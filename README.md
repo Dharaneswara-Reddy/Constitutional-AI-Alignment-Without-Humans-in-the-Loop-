@@ -144,10 +144,9 @@ This pipeline is designed for accessibility:
 
 **Estimated Time & API Costs:**
 *Using Groq's free tier (14,400 req/day):*
-- Dataset Prep (2000 samples): ~90 min ($0.00 API cost)
-- SFT Training (3 epochs): ~45 min
-- GRPO Training (500 prompts): ~2 hours
-- Full Pipeline Cost: **$0.00** 
+- Dataset Prep (2000 samples)
+- SFT Training (3 epochs)
+- GRPO Training (500 prompts)
 
 ---
 
